@@ -29,18 +29,20 @@
     }
     
     MRLog(@"-> Saving %@", [self MR_description]);
-
-    NSError *error = nil;
-	BOOL saved = NO;
+    
+    __block NSError *error = nil;
+	__block BOOL saved = NO;
 	@try
 	{
-        saved = [self save:&error];
+        [self performBlockAndWait:^{
+            saved = [self save:&error];
+        }];
 	}
 	@catch (NSException *exception)
 	{
 		MRLog(@"Unable to perform save: %@", (id)[exception userInfo] ?: (id)[exception reason]);
 	}
-	@finally 
+	@finally
     {
         if (!saved)
         {
@@ -63,27 +65,30 @@
 
 - (void) MR_saveNestedContextsErrorHandler:(void (^)(NSError *))errorCallback;
 {
-    [self performBlockAndWait:^{
+    [self MR_saveNestedContextsErrorHandler:nil completion:nil];
+}
+
+- (void) MR_saveNestedContextsErrorHandler:(void (^)(NSError *))errorCallback completion:(void (^)(void))completion;
+{
+    [self performBlock:^{
         [self MR_saveWithErrorCallback:errorCallback];
+        if (self.parentContext) {
+            [[self parentContext] performBlock:^{
+                [[self parentContext] MR_saveNestedContextsErrorHandler:errorCallback completion:completion];
+            }];
+        } else {
+            if (completion) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    completion();
+                });
+            }
+        }
     }];
-    [[self parentContext] MR_saveNestedContextsErrorHandler:errorCallback];
 }
 
 - (void) MR_save;
 {
-    [self MR_saveErrorHandler:nil];    
-}
-
-- (void) MR_saveErrorHandler:(void (^)(NSError *))errorCallback;
-{
-    [self performBlockAndWait:^{
-        [self MR_saveWithErrorCallback:errorCallback];
-    }];
-    
-    if (self == [[self class] MR_defaultContext])
-    {
-        [[[self class] MR_rootSavingContext] MR_saveInBackgroundErrorHandler:errorCallback];
-    }
+    [self MR_saveWithErrorCallback:nil];
 }
 
 - (void) MR_saveInBackgroundCompletion:(void (^)(void))completion;
@@ -94,6 +99,7 @@
 - (void) MR_saveInBackgroundErrorHandler:(void (^)(NSError *))errorCallback completion:(void (^)(void))completion;
 {
     [self performBlock:^{
+        // Save the context
         [self MR_saveWithErrorCallback:errorCallback];
     
         if (completion) 
@@ -102,10 +108,4 @@
         }
     }];
 }
-
-- (void) MR_saveInBackgroundErrorHandler:(void (^)(NSError *))errorCallback;
-{
-    [self MR_saveInBackgroundErrorHandler:errorCallback completion:nil];
-}
-
 @end
