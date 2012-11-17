@@ -96,6 +96,11 @@
     [self MR_saveInBackgroundErrorHandler:nil completion:completion];
 }
 
+- (void) MR_saveInBackgroundErrorHandler:(void (^)(NSError *))errorCallback;
+{
+    [self MR_saveInBackgroundErrorHandler:errorCallback completion:nil];
+}
+
 - (void) MR_saveInBackgroundErrorHandler:(void (^)(NSError *))errorCallback completion:(void (^)(void))completion;
 {
     [self performBlock:^{
